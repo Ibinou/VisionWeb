@@ -28,66 +28,64 @@
     init();
     
     function init() {
+      // Scene and Camera setup
       scene = new THREE.Scene();
-
-      // Camera
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-      // Renderer
+      // Renderer setup
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // Automatically start AR session (no button)
-      renderer.xr.setSession(ARButton.createSession(renderer, { requiredFeatures: ['hit-test', 'hand-tracking'] }));
+      // Start AR session button
+      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test', 'hand-tracking'] }));
 
-      // AR Window (fixed in space)
+      // AR Window (position fixed in space)
       const geometry = new THREE.PlaneGeometry(0.5, 0.3);
       const material = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8 });
       arWindow = new THREE.Mesh(geometry, material);
-      arWindow.position.set(0, 1.5, -2);  // Position AR window 2 meters in front of the user
+      arWindow.position.set(0, 1.5, -2);  // Place the AR window 2 meters in front
       scene.add(arWindow);
 
-      // Render loop
+      // Handle window resizing
+      window.addEventListener('resize', onWindowResize);
+
+      // Start rendering loop
       renderer.setAnimationLoop(render);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
     function render() {
       if (renderer.xr.isPresenting) {
         const session = renderer.xr.getSession();
+        const hand = session.inputSources.find(source => source.hand);
 
-        session.requestReferenceSpace('viewer').then((refSpace) => {
-          session.requestAnimationFrame(() => {
-            const viewerPose = session.getViewerPose(refSpace);
+        if (hand) {
+          handTracked = true;
 
-            if (viewerPose) {
-              // Track hand and calculate distance between hand and AR window
-              const hand = session.inputSources.find(source => source.hand);
-              if (hand) {
-                handTracked = true;
+          // Check distance between hand and AR window
+          const handPosition = hand.targetRaySpace;
+          const handMatrix = new THREE.Matrix4().fromArray(handPosition.matrix);
+          const handPosVec = new THREE.Vector3().setFromMatrixPosition(handMatrix);
+          handDistance = handPosVec.distanceTo(arWindow.position);
 
-                // Calculate distance between hand and AR window (in 3D space)
-                const handPosition = hand.targetRaySpace;
-                const handMatrix = new THREE.Matrix4().fromArray(handPosition.matrix);
-                const handPosVec = new THREE.Vector3().setFromMatrixPosition(handMatrix);
-
-                handDistance = handPosVec.distanceTo(arWindow.position);
-
-                // Hide window if hand is farther than 5 meters
-                if (handDistance > maxDistance) {
-                  arWindow.material.opacity = Math.max(0, arWindow.material.opacity - 0.05);
-                  if (arWindow.material.opacity <= 0) {
-                    arWindow.visible = false;
-                  }
-                } else {
-                  arWindow.material.opacity = 0.8;
-                  arWindow.visible = true;
-                }
-              }
+          // Hide AR window if user is further than 5 meters
+          if (handDistance > maxDistance) {
+            arWindow.material.opacity = Math.max(0, arWindow.material.opacity - 0.05);
+            if (arWindow.material.opacity <= 0) {
+              arWindow.visible = false;
             }
-          });
-        });
+          } else {
+            arWindow.material.opacity = 0.8;
+            arWindow.visible = true;
+          }
+        }
       }
 
       renderer.render(scene, camera);
