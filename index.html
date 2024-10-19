@@ -38,8 +38,12 @@
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // Start AR session button
-      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test', 'hand-tracking'] }));
+      // Automatically start AR session on page load
+      navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test', 'hand-tracking'] })
+        .then(session => {
+          renderer.xr.setSession(session);
+        })
+        .catch(err => console.log("Error starting AR session: ", err));
 
       // AR Window (position fixed in space)
       const geometry = new THREE.PlaneGeometry(0.5, 0.3);
