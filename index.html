@@ -39,8 +39,8 @@
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // Add AR Button (auto starts session)
-      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test', 'hand-tracking'] }));
+      // Automatically start AR session (no button)
+      renderer.xr.setSession(ARButton.createSession(renderer, { requiredFeatures: ['hit-test', 'hand-tracking'] }));
 
       // AR Window (fixed in space)
       const geometry = new THREE.PlaneGeometry(0.5, 0.3);
@@ -49,21 +49,8 @@
       arWindow.position.set(0, 1.5, -2);  // Position AR window 2 meters in front of the user
       scene.add(arWindow);
 
-      // Start the AR session immediately
-      renderer.xr.getSession().then((session) => {
-        session.addEventListener('selectstart', onPinchGesture);
-      });
-
       // Render loop
       renderer.setAnimationLoop(render);
-    }
-
-    function onPinchGesture() {
-      if (handTracked) {
-        // Toggle visibility on pinch gesture
-        isWindowVisible = !isWindowVisible;
-        arWindow.visible = isWindowVisible;
-      }
     }
 
     function render() {
