@@ -12,15 +12,6 @@
       height: 100%;
       overflow: hidden;
     }
-    #enter-ar {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      padding: 10px;
-      background-color: white;
-      border: none;
-      cursor: pointer;
-    }
     .left-eye, .right-eye {
       position: absolute;
       width: 50%;
@@ -36,7 +27,6 @@
   </style>
 </head>
 <body>
-  <button id="enter-ar">Enter AR</button>
   <div class="left-eye"></div>
   <div class="right-eye"></div>
 
@@ -79,7 +69,9 @@
       scene.add(arWindow);
 
       window.addEventListener('resize', onWindowResize, false);
-      document.getElementById('enter-ar').addEventListener('click', startARSession);
+
+      // Démarrer automatiquement la session AR
+      startARSession();
     }
 
     function startARSession() {
@@ -104,15 +96,12 @@
       rendererR.xr.setSession(session);
 
       session.addEventListener('end', onSessionEnded);
-
-      document.getElementById('enter-ar').style.display = 'none';
     }
 
     function onSessionEnded() {
       // Désactiver AR si la session est terminée
       rendererL.xr.enabled = false;
       rendererR.xr.enabled = false;
-      document.getElementById('enter-ar').style.display = 'block';
     }
 
     function onWindowResize() {
