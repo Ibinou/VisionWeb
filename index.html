@@ -132,7 +132,11 @@
         }
       })
       .then((stream) => {
-        videoElement.srcObject = stream;
+        if ("srcObject" in videoElement) {
+          videoElement.srcObject = stream;  // Utiliser srcObject pour définir le flux vidéo
+        } else {
+          videoElement.src = URL.createObjectURL(stream);  // Ancienne méthode pour certains navigateurs
+        }
         videoElement.play();
       })
       .catch((error) => {
