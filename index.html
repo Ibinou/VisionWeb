@@ -21,7 +21,7 @@
       background-color: white;
       border: none;
       cursor: pointer;
-      display: none; /* Caché tant que le mode AR n'est pas disponible */
+      display: none;
     }
   </style>
 </head>
@@ -46,9 +46,10 @@
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
 
       // Configurer le rendu WebGL avec le support de XR
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // alpha: true pour fond transparent
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true; // Activer XR
       document.body.appendChild(renderer.domElement);
 
       // Vérifier le support WebXR pour AR
@@ -66,7 +67,7 @@
       arWindow = new THREE.Mesh(geometry, material);
       
       // Placer la fenêtre AR à 2 mètres en face de l'utilisateur
-      arWindow.position.set(0, 1, -2);
+      arWindow.position.set(0, 1, -2); // Ajuste la hauteur et distance
       scene.add(arWindow);
 
       // Gérer la redimension de la fenêtre
@@ -98,3 +99,4 @@
   </script>
 </body>
 </html>
+
