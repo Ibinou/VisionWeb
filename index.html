@@ -3,208 +3,121 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AR Window with Passthrough and File Picker</title>
+  <title>WebXR AR Window</title>
   <style>
     body {
       margin: 0;
       overflow: hidden;
-      background-color: black;
+      font-family: sans-serif;
     }
-    canvas {
-      display: block;
-    }
-    #fileInput {
-      display: none;
-    }
-    video {
+    #startButton {
       position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      z-index: -1;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-  <input type="file" id="fileInput" accept="image/*">
-  <video id="video" autoplay playsinline></video>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+  <button id="startButton">Enter AR</button>
 
-  <script>
-    let scene, camera, renderer, arWindow, occlusionMesh, fileInput;
-    let videoElement, handTrackingStarted = false;
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js';
+    import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.153.0/examples/jsm/webxr/ARButton.js';
+
+    let camera, scene, renderer;
+    let arWindow, handTracked = false;
+    let handDistance = 0;
+    let isWindowVisible = true;
+
+    const maxDistance = 5; // Disappear if user is further than 5 meters
 
     init();
-    animate();
-
+    
     function init() {
-      // Initialisation de la scène
       scene = new THREE.Scene();
 
-      // Création de la caméra
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-      camera.position.set(0, 1.5, 3); // Placer la caméra à une hauteur et une distance réaliste
+      // Camera
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-      // Initialisation du renderer
+      // Renderer
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // Création de la fenêtre AR avec un effet réaliste
-      const windowGeometry = new THREE.PlaneGeometry(1.2, 0.8);
-      const windowMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-      arWindow = new THREE.Mesh(windowGeometry, windowMaterial);
-      arWindow.position.set(0, 1.5, -2);  // Position fixe dans l'espace réel
+      // Add AR Button
+      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test', 'hand-tracking'] }));
+
+      // Event listener for AR start
+      document.getElementById('startButton').addEventListener('click', () => {
+        renderer.xr.getSession().addEventListener('selectstart', onPinchGesture);
+      });
+
+      // AR Window (fixed in space)
+      const geometry = new THREE.PlaneGeometry(0.5, 0.3);
+      const material = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.8 });
+      arWindow = new THREE.Mesh(geometry, material);
+      arWindow.position.set(0, 1.5, -2);  // Position AR window 2 meters in front of the user
       scene.add(arWindow);
 
-      // Masque d'occlusion pour passer la main devant
-      const occlusionMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, opacity: 0.5 });
-      occlusionMesh = new THREE.Mesh(windowGeometry, occlusionMaterial);
-      occlusionMesh.position.set(0, 1.5, -2);
-      scene.add(occlusionMesh);
-
-      // Détection de clic sur la fenêtre AR
-      window.addEventListener('click', onWindowClick);
-
-      // Initialisation du file picker
-      fileInput = document.getElementById('fileInput');
-      fileInput.addEventListener('change', onFileSelected);
-
-      // Initialisation du tracking des mains avec MediaPipe
-      loadHandTracking();
-
-      // Activer la caméra arrière pour AR
-      activateRearCamera();
-
-      window.addEventListener('resize', onWindowResize, false);
+      // Render loop
+      renderer.setAnimationLoop(render);
     }
 
-    // Fonction pour ouvrir un file picker
-    function onWindowClick(event) {
-      const raycaster = new THREE.Raycaster();
-      const mouse = new THREE.Vector2();
-
-      // Calcul des coordonnées de la souris
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObject(arWindow);
-
-      if (intersects.length > 0) {
-        // Ouvrir le file picker si la fenêtre AR est cliquée
-        fileInput.click();
+    function onPinchGesture() {
+      if (handTracked) {
+        // Toggle visibility on pinch gesture
+        isWindowVisible = !isWindowVisible;
+        arWindow.visible = isWindowVisible;
       }
     }
 
-    // Fonction pour gérer l'image sélectionnée
-    function onFileSelected(event) {
-      const file = event.target.files[0];
-      if (!file) return;
+    function render() {
+      if (renderer.xr.isPresenting) {
+        const session = renderer.xr.getSession();
 
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const texture = new THREE.TextureLoader().load(e.target.result);
-        arWindow.material.map = texture;
-        arWindow.material.needsUpdate = true;
-      };
-      reader.readAsDataURL(file);
-    }
+        session.requestReferenceSpace('viewer').then((refSpace) => {
+          session.requestAnimationFrame(() => {
+            const viewerPose = session.getViewerPose(refSpace);
 
-    // Fonction pour gérer la redimension de la fenêtre
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
+            if (viewerPose) {
+              // Track hand and calculate distance between hand and AR window
+              const hand = session.inputSources.find(source => source.hand);
+              if (hand) {
+                handTracked = true;
 
-    // Fonction pour activer la caméra arrière et l'utiliser comme arrière-plan
-    function activateRearCamera() {
-      videoElement = document.getElementById('video');
+                // Calculate distance between hand and AR window (in 3D space)
+                const handPosition = hand.targetRaySpace;
+                const handMatrix = new THREE.Matrix4().fromArray(handPosition.matrix);
+                const handPosVec = new THREE.Vector3().setFromMatrixPosition(handMatrix);
 
-      navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' }  // Utiliser la caméra arrière
-        }
-      })
-      .then((stream) => {
-        if ("srcObject" in videoElement) {
-          videoElement.srcObject = stream;  // Utiliser srcObject pour définir le flux vidéo
-        } else {
-          videoElement.src = URL.createObjectURL(stream);  // Ancienne méthode pour certains navigateurs
-        }
-        videoElement.play();
-      })
-      .catch((error) => {
-        console.error('Erreur d\'accès à la caméra arrière :', error);
-      });
-    }
+                handDistance = handPosVec.distanceTo(arWindow.position);
 
-    // Initialisation du tracking des mains
-    function loadHandTracking() {
-      const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-      hands.setOptions({
-        maxNumHands: 2,
-        modelComplexity: 1,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-      });
-
-      hands.onResults(onHandResults);
-
-      const cameraFeed = new Camera(videoElement, {
-        onFrame: async () => {
-          if (handTrackingStarted) {
-            await hands.send({ image: videoElement });
-          }
-        },
-        width: 1280,
-        height: 720
-      });
-
-      cameraFeed.start();
-      handTrackingStarted = true;
-    }
-
-    // Fonction pour gérer les résultats du tracking des mains
-    function onHandResults(results) {
-      // Suppression des objets existants
-      while (scene.children.length > 2) {
-        const obj = scene.children[2];
-        scene.remove(obj);
-      }
-
-      // Si des mains sont détectées
-      if (results.multiHandLandmarks) {
-        for (const landmarks of results.multiHandLandmarks) {
-          // Création de sphères pour les landmarks de la main
-          landmarks.forEach((landmark) => {
-            const sphereGeometry = new THREE.SphereGeometry(0.01);
-            const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-
-            // Mapping des coordonnées des landmarks de la main dans l'espace 3D
-            sphere.position.set(
-              (landmark.x - 0.5) * 2, // Centrer sur l'écran
-              -(landmark.y - 0.5) * 2,
-              -landmark.z * 2
-            );
-
-            scene.add(sphere);
+                // Hide window if hand is farther than 5 meters
+                if (handDistance > maxDistance) {
+                  arWindow.material.opacity = Math.max(0, arWindow.material.opacity - 0.05);
+                  if (arWindow.material.opacity <= 0) {
+                    arWindow.visible = false;
+                  }
+                } else {
+                  arWindow.material.opacity = 0.8;
+                  arWindow.visible = true;
+                }
+              }
+            }
           });
-        }
+        });
       }
-    }
 
-    // Fonction d'animation pour le rendu en continu
-    function animate() {
-      requestAnimationFrame(animate);
       renderer.render(scene, camera);
     }
+
   </script>
 </body>
 </html>
