@@ -21,33 +21,80 @@
       background-color: white;
       border: none;
       cursor: pointer;
+      display: none; /* Caché tant que le mode AR n'est pas disponible */
     }
   </style>
 </head>
 <body>
   <button id="enter-ar">Enter AR</button>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/webxr/VRButton.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/webxr/ARButton.js"></script>
-  <script src="script.js"></script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AR Window with Camera</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="ar-container">
-    <div class="ar-window">
-      <video id="video" autoplay playsinline></video>
-      <p>AR WINDOW</p>
-    </div>
-  </div>
 
-  <script src="script.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <script>
+    let camera, scene, renderer;
+    let arWindow;
+
+    // Initialisation de la scène
+    init();
+    animate();
+
+    function init() {
+      // Créer la scène de base Three.js
+      scene = new THREE.Scene();
+
+      // Configurer la caméra
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+      // Configurer le rendu WebGL avec le support de XR
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // Vérifier le support WebXR pour AR
+      if (navigator.xr) {
+        navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
+          if (supported) {
+            document.getElementById('enter-ar').style.display = 'block';
+          }
+        });
+      }
+
+      // Créer une fenêtre AR (simplement une plane 3D)
+      const geometry = new THREE.PlaneGeometry(1, 0.5);  // Largeur : 1 mètre, Hauteur : 0.5 mètre
+      const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
+      arWindow = new THREE.Mesh(geometry, material);
+      
+      // Placer la fenêtre AR à 2 mètres en face de l'utilisateur
+      arWindow.position.set(0, 1, -2);
+      scene.add(arWindow);
+
+      // Gérer la redimension de la fenêtre
+      window.addEventListener('resize', onWindowResize, false);
+
+      // Démarrer la session AR lorsque le bouton est cliqué
+      document.getElementById('enter-ar').addEventListener('click', startARSession);
+    }
+
+    function startARSession() {
+      navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['local-floor'] }).then((session) => {
+        renderer.xr.setSession(session);
+      });
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      renderer.setAnimationLoop(render);
+    }
+
+    function render() {
+      renderer.render(scene, camera);
+    }
+  </script>
 </body>
 </html>
