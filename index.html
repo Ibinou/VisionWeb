@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AR Window with Passthrough</title>
+  <title>AR Window with Passthrough and File Picker</title>
   <style>
     body {
       margin: 0;
@@ -47,24 +47,24 @@
 
       // Création de la caméra
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-      camera.position.z = 2;
+      camera.position.set(0, 1.5, 3); // Placer la caméra à une hauteur et une distance réaliste
 
       // Initialisation du renderer
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       document.body.appendChild(renderer.domElement);
 
-      // Création de la fenêtre AR
+      // Création de la fenêtre AR avec un effet réaliste
       const windowGeometry = new THREE.PlaneGeometry(1.2, 0.8);
       const windowMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
       arWindow = new THREE.Mesh(windowGeometry, windowMaterial);
-      arWindow.position.set(0, 1, -2);
+      arWindow.position.set(0, 1.5, -2);  // Position fixe dans l'espace réel
       scene.add(arWindow);
 
-      // Masque d'occlusion
+      // Masque d'occlusion pour passer la main devant
       const occlusionMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, opacity: 0.5 });
       occlusionMesh = new THREE.Mesh(windowGeometry, occlusionMaterial);
-      occlusionMesh.position.set(0, 1, -2);
+      occlusionMesh.position.set(0, 1.5, -2);
       scene.add(occlusionMesh);
 
       // Détection de clic sur la fenêtre AR
@@ -77,8 +77,8 @@
       // Initialisation du tracking des mains avec MediaPipe
       loadHandTracking();
 
-      // Activer la caméra vidéo
-      activateCamera();
+      // Activer la caméra arrière pour AR
+      activateRearCamera();
 
       window.addEventListener('resize', onWindowResize, false);
     }
@@ -122,26 +122,26 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    // Fonction pour activer la caméra vidéo et l'utiliser comme arrière-plan
-    function activateCamera() {
+    // Fonction pour activer la caméra arrière et l'utiliser comme arrière-plan
+    function activateRearCamera() {
       videoElement = document.getElementById('video');
 
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then((stream) => {
-          videoElement.srcObject = stream;
-          videoElement.play();
-        })
-        .catch((error) => {
-          console.error('Erreur d\'accès à la caméra :', error);
-        });
+      navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' }  // Utiliser la caméra arrière
+        }
+      })
+      .then((stream) => {
+        videoElement.srcObject = stream;
+        videoElement.play();
+      })
+      .catch((error) => {
+        console.error('Erreur d\'accès à la caméra arrière :', error);
+      });
     }
 
     // Initialisation du tracking des mains
     function loadHandTracking() {
-      videoElement = document.createElement('video');
-      videoElement.style.display = 'none';
-      document.body.appendChild(videoElement);
-
       const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
       hands.setOptions({
         maxNumHands: 2,
