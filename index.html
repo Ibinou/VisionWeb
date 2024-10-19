@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AR Realistic Window</title>
+  <title>AR Fixed Window with Stereo View</title>
   <style>
     body, html {
       margin: 0;
@@ -31,28 +31,28 @@
 
   <script>
     let camera, scene, renderer;
-    let arWindow, userPosition, distanceThreshold = 5;
-    let windowVisible = false;  // Variable pour suivre la visibilité de la fenêtre
+    let arWindow, xrHitTestSource, xrAnchor;
+    let windowVisible = false;
+    let distanceThreshold = 5;
 
     // Initialisation de la scène
     init();
     animate();
 
     function init() {
-      // Créer la scène de base Three.js
+      // Créer la scène Three.js
       scene = new THREE.Scene();
 
-      // Configurer la caméra
+      // Configurer la caméra avec un rendu stéréo pour Google Cardboard
       camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-
-      // Configurer le rendu WebGL avec le support de XR
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // alpha: true pour fond transparent
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true; // Activer XR
+      renderer.xr.enabled = true;
+      renderer.xr.setFramebufferScaleFactor(2.0);  // Améliorer la qualité du rendu
+      renderer.xr.setReferenceSpaceType('local-floor');
       document.body.appendChild(renderer.domElement);
 
-      // Vérifier le support WebXR pour AR
       if (navigator.xr) {
         navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
           if (supported) {
@@ -61,19 +61,14 @@
         });
       }
 
-      // Créer une fenêtre AR (simplement une plane 3D)
-      const geometry = new THREE.PlaneGeometry(1.2, 0.8);  // Ajuste les dimensions de la fenêtre
+      // Créer une fenêtre AR
+      const geometry = new THREE.PlaneGeometry(1.2, 0.8);
       const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
       arWindow = new THREE.Mesh(geometry, material);
-      
-      // Placer la fenêtre AR à une distance fixe
-      arWindow.position.set(0, 1, -2); // Ajuste la hauteur et distance
+      arWindow.visible = false;  // La fenêtre ne sera visible que lorsque placée
       scene.add(arWindow);
 
-      // Gérer la redimension de la fenêtre
       window.addEventListener('resize', onWindowResize, false);
-
-      // Démarrer la session AR lorsque le bouton est cliqué
       document.getElementById('enter-ar').addEventListener('click', startARSession);
     }
 
@@ -83,8 +78,21 @@
         optionalFeatures: ['dom-overlay', 'camera-access']
       }).then((session) => {
         renderer.xr.setSession(session);
+
+        // Définir le hit-test source pour ancrer l'objet
+        session.requestReferenceSpace('viewer').then((refSpace) => {
+          session.requestHitTestSource({ space: refSpace }).then((hitTestSource) => {
+            xrHitTestSource = hitTestSource;
+          });
+        });
+
         session.addEventListener('select', () => {
-          // Placeholder: éventuel ajout de nouvelles interactions
+          // Placeholder: actions interactives futures
+        });
+
+        session.addEventListener('end', () => {
+          xrHitTestSource = null;
+          xrAnchor = null;
         });
       });
     }
@@ -99,33 +107,45 @@
       renderer.setAnimationLoop(render);
     }
 
-    function render() {
-      if (renderer.xr.isPresenting) {
-        // Récupérer la position actuelle de l'utilisateur
-        const userPosition = renderer.xr.getCamera(camera).position;
-        
-        // Calculer la distance entre l'utilisateur et la fenêtre AR
-        const distanceToWindow = userPosition.distanceTo(arWindow.position);
+    function render(timestamp, frame) {
+      if (renderer.xr.isPresenting && xrHitTestSource) {
+        const referenceSpace = renderer.xr.getReferenceSpace();
+        const viewerPose = frame.getViewerPose(referenceSpace);
 
-        // Si l'utilisateur est à plus de `distanceThreshold` mètres, la fenêtre devient invisible
-        if (distanceToWindow > distanceThreshold) {
-          if (windowVisible) {
-            arWindow.visible = false;
-            windowVisible = false;
-          }
-        } else {
-          // Si l'utilisateur est à l'intérieur de la limite, la fenêtre réapparaît
-          if (!windowVisible) {
-            arWindow.visible = true;
-            windowVisible = true;
+        const hitTestResults = frame.getHitTestResults(xrHitTestSource);
+        if (hitTestResults.length > 0 && !xrAnchor) {
+          const hit = hitTestResults[0];
+          const hitPose = hit.getPose(referenceSpace);
+
+          // Créer un anchor pour fixer la fenêtre à la position
+          xrAnchor = renderer.xr.createAnchor(hitPose.transform, referenceSpace);
+
+          // Placer la fenêtre à l'endroit de l'anchor
+          arWindow.position.copy(hitPose.transform.position);
+          arWindow.visible = true;
+        }
+
+        // Ajuster la visibilité selon la distance avec l'utilisateur
+        if (xrAnchor) {
+          const userPosition = renderer.xr.getCamera(camera).position;
+          const distanceToWindow = userPosition.distanceTo(arWindow.position);
+
+          if (distanceToWindow > distanceThreshold) {
+            if (windowVisible) {
+              arWindow.visible = false;
+              windowVisible = false;
+            }
+          } else {
+            if (!windowVisible) {
+              arWindow.visible = true;
+              windowVisible = true;
+            }
           }
         }
       }
-      
+
       renderer.render(scene, camera);
     }
   </script>
 </body>
 </html>
-
-
