@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AR Window</title>
+  <title>AR Realistic Window</title>
   <style>
     body, html {
       margin: 0;
@@ -31,7 +31,8 @@
 
   <script>
     let camera, scene, renderer;
-    let arWindow;
+    let arWindow, userPosition, distanceThreshold = 5;
+    let windowVisible = false;  // Variable pour suivre la visibilité de la fenêtre
 
     // Initialisation de la scène
     init();
@@ -61,11 +62,11 @@
       }
 
       // Créer une fenêtre AR (simplement une plane 3D)
-      const geometry = new THREE.PlaneGeometry(1, 0.5);  // Largeur : 1 mètre, Hauteur : 0.5 mètre
+      const geometry = new THREE.PlaneGeometry(1.2, 0.8);  // Ajuste les dimensions de la fenêtre
       const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
       arWindow = new THREE.Mesh(geometry, material);
       
-      // Placer la fenêtre AR à 2 mètres en face de l'utilisateur
+      // Placer la fenêtre AR à une distance fixe
       arWindow.position.set(0, 1, -2); // Ajuste la hauteur et distance
       scene.add(arWindow);
 
@@ -82,6 +83,9 @@
         optionalFeatures: ['dom-overlay', 'camera-access']
       }).then((session) => {
         renderer.xr.setSession(session);
+        session.addEventListener('select', () => {
+          // Placeholder: éventuel ajout de nouvelles interactions
+        });
       });
     }
 
@@ -96,9 +100,32 @@
     }
 
     function render() {
+      if (renderer.xr.isPresenting) {
+        // Récupérer la position actuelle de l'utilisateur
+        const userPosition = renderer.xr.getCamera(camera).position;
+        
+        // Calculer la distance entre l'utilisateur et la fenêtre AR
+        const distanceToWindow = userPosition.distanceTo(arWindow.position);
+
+        // Si l'utilisateur est à plus de `distanceThreshold` mètres, la fenêtre devient invisible
+        if (distanceToWindow > distanceThreshold) {
+          if (windowVisible) {
+            arWindow.visible = false;
+            windowVisible = false;
+          }
+        } else {
+          // Si l'utilisateur est à l'intérieur de la limite, la fenêtre réapparaît
+          if (!windowVisible) {
+            arWindow.visible = true;
+            windowVisible = true;
+          }
+        }
+      }
+      
       renderer.render(scene, camera);
     }
   </script>
 </body>
 </html>
+
 
