@@ -22,20 +22,35 @@
       cursor: pointer;
       display: none;
     }
+    .left-eye, .right-eye {
+      position: absolute;
+      width: 50%;
+      height: 100%;
+      top: 0;
+    }
+    .left-eye {
+      left: 0;
+    }
+    .right-eye {
+      right: 0;
+    }
   </style>
 </head>
 <body>
   <button id="enter-ar">Enter AR</button>
+  <div class="left-eye"></div>
+  <div class="right-eye"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
   <script>
-    let camera, scene, renderer;
-    let arWindow, xrHitTestSource, xrAnchor;
+    let camera, scene, rendererL, rendererR;
+    let arWindow;
     let windowVisible = false;
     let distanceThreshold = 5;
+    let userSetPosition = false;
 
-    // Initialisation de la scène
+    // Initialisation de la scène pour chaque œil
     init();
     animate();
 
@@ -43,16 +58,22 @@
       // Créer la scène Three.js
       scene = new THREE.Scene();
 
-      // Configurer la caméra avec un rendu stéréo pour Google Cardboard
-      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.xr.enabled = true;
-      renderer.xr.setFramebufferScaleFactor(2.0);  // Améliorer la qualité du rendu
-      renderer.xr.setReferenceSpaceType('local-floor');
-      document.body.appendChild(renderer.domElement);
+      // Configurer la caméra avec un rendu stéréo manuel
+      camera = new THREE.PerspectiveCamera(70, 0.5 * window.innerWidth / window.innerHeight, 0.01, 20);
 
+      // Renderer pour l'œil gauche
+      rendererL = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      rendererL.setPixelRatio(window.devicePixelRatio);
+      rendererL.setSize(window.innerWidth / 2, window.innerHeight);
+      document.querySelector('.left-eye').appendChild(rendererL.domElement);
+
+      // Renderer pour l'œil droit
+      rendererR = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      rendererR.setPixelRatio(window.devicePixelRatio);
+      rendererR.setSize(window.innerWidth / 2, window.innerHeight);
+      document.querySelector('.right-eye').appendChild(rendererR.domElement);
+
+      // Bouton d'activation AR
       if (navigator.xr) {
         navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
           if (supported) {
@@ -65,7 +86,7 @@
       const geometry = new THREE.PlaneGeometry(1.2, 0.8);
       const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
       arWindow = new THREE.Mesh(geometry, material);
-      arWindow.visible = false;  // La fenêtre ne sera visible que lorsque placée
+      arWindow.position.set(0, 1.5, -2); // Position initiale par défaut
       scene.add(arWindow);
 
       window.addEventListener('resize', onWindowResize, false);
@@ -73,77 +94,41 @@
     }
 
     function startARSession() {
+      // Démarrer une session AR sans dépendre d'un hit-test, on fixe l'objet au premier clic
+      if (!userSetPosition) {
+        arWindow.position.set(0, 1.5, -2); // Position initiale par défaut (à ajuster si besoin)
+        arWindow.visible = true;
+        userSetPosition = true;
+      }
+
+      // Simulation de la caméra AR
       navigator.xr.requestSession('immersive-ar', {
         requiredFeatures: ['local-floor', 'hit-test'],
         optionalFeatures: ['dom-overlay', 'camera-access']
       }).then((session) => {
-        renderer.xr.setSession(session);
-
-        // Définir le hit-test source pour ancrer l'objet
-        session.requestReferenceSpace('viewer').then((refSpace) => {
-          session.requestHitTestSource({ space: refSpace }).then((hitTestSource) => {
-            xrHitTestSource = hitTestSource;
-          });
-        });
-
-        session.addEventListener('select', () => {
-          // Placeholder: actions interactives futures
-        });
+        // Activation du mode AR
+        rendererL.xr.setSession(session);
+        rendererR.xr.setSession(session);
 
         session.addEventListener('end', () => {
-          xrHitTestSource = null;
-          xrAnchor = null;
+          arWindow.visible = false;
         });
       });
     }
 
     function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = 0.5 * window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      rendererL.setSize(window.innerWidth / 2, window.innerHeight);
+      rendererR.setSize(window.innerWidth / 2, window.innerHeight);
     }
 
     function animate() {
-      renderer.setAnimationLoop(render);
+      rendererL.setAnimationLoop(() => render(rendererL));
+      rendererR.setAnimationLoop(() => render(rendererR));
     }
 
-    function render(timestamp, frame) {
-      if (renderer.xr.isPresenting && xrHitTestSource) {
-        const referenceSpace = renderer.xr.getReferenceSpace();
-        const viewerPose = frame.getViewerPose(referenceSpace);
-
-        const hitTestResults = frame.getHitTestResults(xrHitTestSource);
-        if (hitTestResults.length > 0 && !xrAnchor) {
-          const hit = hitTestResults[0];
-          const hitPose = hit.getPose(referenceSpace);
-
-          // Créer un anchor pour fixer la fenêtre à la position
-          xrAnchor = renderer.xr.createAnchor(hitPose.transform, referenceSpace);
-
-          // Placer la fenêtre à l'endroit de l'anchor
-          arWindow.position.copy(hitPose.transform.position);
-          arWindow.visible = true;
-        }
-
-        // Ajuster la visibilité selon la distance avec l'utilisateur
-        if (xrAnchor) {
-          const userPosition = renderer.xr.getCamera(camera).position;
-          const distanceToWindow = userPosition.distanceTo(arWindow.position);
-
-          if (distanceToWindow > distanceThreshold) {
-            if (windowVisible) {
-              arWindow.visible = false;
-              windowVisible = false;
-            }
-          } else {
-            if (!windowVisible) {
-              arWindow.visible = true;
-              windowVisible = true;
-            }
-          }
-        }
-      }
-
+    function render(renderer) {
       renderer.render(scene, camera);
     }
   </script>
